@@ -27,8 +27,27 @@ export function SmoothScroll() {
     lenis = new Lenis({ lerp: reduced ? 1 : 0.075, wheelMultiplier: 0.9, touchMultiplier: 1.4 });
     lenis.stop();
 
+    // Section tops/heights, cached and refreshed on resize.
+    let bounds: { top: number; height: number }[] = [];
+    const measure = () => {
+      bounds = Array.from(document.querySelectorAll<HTMLElement>("[data-section]")).map((el) => ({
+        top: el.offsetTop,
+        height: el.offsetHeight,
+      }));
+    };
+    const toSection = (y: number) => {
+      let i = 0;
+      while (i < bounds.length - 1 && y >= bounds[i + 1].top) i++;
+      const b = bounds[i];
+      return b ? i + Math.min(Math.max((y - b.top) / b.height, 0), 1) : 0;
+    };
+    measure();
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(document.body);
+
     lenis.on("scroll", (l: Lenis) => {
       frame.scroll = l.progress || 0;
+      frame.section = toSection(l.animatedScroll);
       frame.velocity = l.velocity;
       ScrollTrigger.update();
     });
@@ -48,6 +67,7 @@ export function SmoothScroll() {
 
     return () => {
       triggers.forEach((t) => t.kill());
+      resizeObserver.disconnect();
       gsap.ticker.remove(tick);
       lenis?.destroy();
       lenis = null;

@@ -1,37 +1,41 @@
 "use client";
 
-import { Sky } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import {
   CatmullRomCurve3,
   DirectionalLight,
   FogExp2,
+  Group,
   HemisphereLight,
   MathUtils,
-  Mesh,
   PerspectiveCamera,
   Raycaster,
-  ShaderMaterial,
   Vector3,
 } from "three";
 import { ambience } from "@/lib/audio";
-import { frame, useApp } from "@/lib/store";
+import { journey, pointer, pointerRecentlyMoved } from "@/lib/journey";
 import { heightAt } from "@/lib/terrain";
 import { createAtmosphere, sampleAtmosphere } from "@/lib/timeOfDay";
+import { VALLEY_END } from "@/lib/worlds";
 import { Grass, type GrassUniformsTarget } from "./Grass";
 import { Particles } from "./Particles";
+import { SkyDome, type SkyUniforms } from "./SkyDome";
 import { Terrain } from "./Terrain";
 
 export interface Quality {
   grass: number;
   terrainSegments: number;
   particles: number;
+  oceanRings: number;
+  oceanSegments: number;
+  stars: number;
+  postfx: "full" | "lite";
 }
 
 const ground = (x: number, z: number, lift: number) => new Vector3(x, heightAt(x, z) + lift, z);
 
-/** The camera glides through the valley as the page scrolls. */
+/** The camera glides through the valley, then rises towards the clouds before the ocean. */
 const PATH = new CatmullRomCurve3([
   ground(0, 12, 1.75),
   ground(4.5, -2, 2.0),
@@ -44,7 +48,7 @@ const LOOK = new CatmullRomCurve3([
   new Vector3(-4, 3.5, -50),
   new Vector3(7, 7, -80),
   new Vector3(0, 14, -140),
-  new Vector3(0, 22, -260),
+  new Vector3(0, 40, -260),
 ]);
 
 const tmpPos = new Vector3();
@@ -75,9 +79,9 @@ function marchGround(origin: Vector3, dir: Vector3, out: Vector3) {
   return false;
 }
 
+/** World 1: a mountain valley from morning to sunset. */
 export function Nature({ quality }: { quality: Quality }) {
   const { gl, scene, camera } = useThree();
-  const entered = useApp((s) => s.entered);
 
   const atmosphere = useMemo(createAtmosphere, []);
   const interaction = useMemo<GrassUniformsTarget>(
@@ -85,62 +89,28 @@ export function Nature({ quality }: { quality: Quality }) {
     [],
   );
 
-  const sky = useRef<Mesh & { material: ShaderMaterial }>(null);
+  const group = useRef<Group>(null);
+  const sky = useRef<SkyUniforms>(null);
   const sun = useRef<DirectionalLight>(null);
   const hemi = useRef<HemisphereLight>(null);
-
-  const state = useRef({
-    progress: 0,
-    intro: 0,
-    parallax: { x: 0, y: 0 },
-    lastMove: -10,
-    moveDistance: 0,
-    lastX: 0,
-    lastY: 0,
-    hasPointer: false,
-    audioTick: 0,
-  });
+  const state = useRef({ parallax: { x: 0, y: 0 }, audioTick: 0 });
 
   useEffect(() => {
-    scene.fog = new FogExp2("#c9b9a2", 0.0038);
-    const s = state.current;
-    const onMove = (e: PointerEvent) => {
-      if (s.hasPointer) s.moveDistance += Math.hypot(e.clientX - s.lastX, e.clientY - s.lastY);
-      s.lastX = e.clientX;
-      s.lastY = e.clientY;
-      s.hasPointer = true;
-      s.lastMove = performance.now();
-    };
-    const onLeave = () => {
-      s.hasPointer = false;
-      s.lastMove = -10;
-    };
-    window.addEventListener("pointermove", onMove, { passive: true });
-    document.documentElement.addEventListener("pointerleave", onLeave);
+    const fog = new FogExp2("#c9b9a2", 0.0032);
+    scene.fog = fog;
     return () => {
-      window.removeEventListener("pointermove", onMove);
-      document.documentElement.removeEventListener("pointerleave", onLeave);
-      scene.fog = null;
+      if (scene.fog === fog) scene.fog = null;
     };
   }, [scene]);
 
   useFrame((r3f, delta) => {
+    const active = journey.world === "valley";
+    if (group.current) group.current.visible = active;
+    if (!active) return;
+
     const s = state.current;
     const dt = Math.min(delta, 0.1);
-
-    // Smoothed scroll progress and intro dolly.
-    s.progress = MathUtils.damp(s.progress, frame.scroll, 3, dt);
-    if (entered) s.intro = MathUtils.damp(s.intro, 1, 1.1, dt);
-    // Dev-only: `window.__snap = 0.5` jumps straight to a point of the journey.
-    if (process.env.NODE_ENV !== "production") {
-      const snap = (window as unknown as { __snap?: number }).__snap;
-      if (snap !== undefined) {
-        s.progress = snap;
-        s.intro = 1;
-      }
-    }
-    const p = s.progress;
-
+    const p = MathUtils.clamp(journey.s / VALLEY_END, 0, 1);
     sampleAtmosphere(p, atmosphere);
 
     // Camera.
@@ -148,7 +118,7 @@ export function Nature({ quality }: { quality: Quality }) {
     s.parallax.y = MathUtils.damp(s.parallax.y, r3f.pointer.y, 2.5, dt);
     PATH.getPointAt(p, tmpPos);
     LOOK.getPointAt(p, tmpLook);
-    const intro = 1 - s.intro;
+    const intro = 1 - journey.intro;
     tmpPos.y -= intro * 0.4;
     tmpPos.z += intro * 4;
     tmpPos.x += s.parallax.x * 0.35;
@@ -169,10 +139,9 @@ export function Nature({ quality }: { quality: Quality }) {
     const az = MathUtils.degToRad(atmosphere.azimuth);
     const sunDir = tmpRay.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
     if (sky.current) {
-      const u = sky.current.material.uniforms;
-      u.sunPosition.value.copy(sunDir);
-      u.turbidity.value = atmosphere.turbidity;
-      u.rayleigh.value = atmosphere.rayleigh;
+      sky.current.sunPosition.value.copy(sunDir);
+      sky.current.turbidity.value = atmosphere.turbidity;
+      sky.current.rayleigh.value = atmosphere.rayleigh;
     }
     if (sun.current) {
       sun.current.position.copy(sunDir).multiplyScalar(120).add(camera.position);
@@ -190,26 +159,25 @@ export function Nature({ quality }: { quality: Quality }) {
 
     // Pointer → grass.
     raycaster.setFromCamera(r3f.pointer, camera);
-    const recent = performance.now() - s.lastMove < 2500;
-    const hit = s.hasPointer && recent && marchGround(raycaster.ray.origin, raycaster.ray.direction, interaction.pointer);
+    const hit = pointerRecentlyMoved() && marchGround(raycaster.ray.origin, raycaster.ray.direction, interaction.pointer);
     interaction.pointerForce = MathUtils.damp(interaction.pointerForce, hit ? 1 : 0, 4, dt);
 
     // Pointer speed → gust (visual + audio).
-    const speed = s.moveDistance / Math.max(dt * 60, 1);
-    s.moveDistance = 0;
-    frame.pointerSpeed = MathUtils.damp(frame.pointerSpeed, speed, 6, dt);
-    interaction.gust = MathUtils.damp(interaction.gust, Math.min(frame.pointerSpeed / 70, 1), 2, dt);
-    if (++s.audioTick % 4 === 0) ambience.setGust(interaction.gust);
+    interaction.gust = MathUtils.damp(interaction.gust, Math.min(pointer.speed / 70, 1), 2, dt);
+    if (++s.audioTick % 4 === 0) {
+      ambience.setGust(interaction.gust);
+      ambience.setScene("valley");
+    }
   });
 
   return (
-    <>
-      <Sky ref={sky as never} distance={4500} mieCoefficient={0.005} mieDirectionalG={0.82} />
+    <group ref={group}>
+      <SkyDome ref={sky} clouds={0.32} />
       <hemisphereLight ref={hemi} intensity={1.5} />
       <directionalLight ref={sun} />
       <Terrain segments={quality.terrainSegments} />
       <Grass count={quality.grass} atmosphere={atmosphere} interaction={interaction} />
       <Particles count={quality.particles} atmosphere={atmosphere} />
-    </>
+    </group>
   );
 }

@@ -106,7 +106,7 @@ export function Sections() {
 
       {/* Real time */}
       <section data-section className="flex min-h-[130svh] items-center px-6 sm:px-12 lg:px-24">
-        <div className="max-w-xl">
+        <div className="scrim max-w-xl">
           <Kicker>{t.realtime.kicker}</Kicker>
           <h2 data-reveal className="font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-tight">
             {t.realtime.title}
@@ -123,7 +123,7 @@ export function Sections() {
 
       {/* Listen */}
       <section data-section className="flex min-h-[130svh] items-center justify-end px-6 sm:px-12 lg:px-24">
-        <div className="max-w-xl text-right">
+        <div className="scrim max-w-xl text-right">
           <Kicker>{t.listen.kicker}</Kicker>
           <h2 data-reveal className="font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-tight">
             {t.listen.title}
@@ -134,6 +134,40 @@ export function Sections() {
           <p data-reveal className="mt-6 inline-flex items-center gap-3 text-sm text-[#e9d9a8]">
             {t.listen.action}
             <span className="h-px w-8 bg-current" />
+          </p>
+        </div>
+      </section>
+
+      {/* Ocean */}
+      <section data-section className="flex min-h-[160svh] items-end px-6 pb-[30svh] sm:px-12 lg:px-24">
+        <div className="scrim max-w-xl">
+          <Kicker>{t.ocean.kicker}</Kicker>
+          <h2 data-reveal className="font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-tight">
+            {t.ocean.title}
+          </h2>
+          <p data-reveal className="mt-8 text-lg leading-relaxed text-white/85">
+            {t.ocean.body}
+          </p>
+          <p data-reveal className="mt-6 inline-flex items-center gap-3 text-sm text-[#e9d9a8]">
+            <span className="h-px w-8 bg-current" />
+            {t.ocean.action}
+          </p>
+        </div>
+      </section>
+
+      {/* Night sky */}
+      <section data-section className="flex min-h-[170svh] items-center px-6 sm:px-12 lg:px-24">
+        <div className="scrim max-w-md">
+          <Kicker>{t.sky.kicker}</Kicker>
+          <h2 data-reveal className="font-display text-[clamp(2.75rem,7vw,6rem)] leading-[0.95] tracking-tight">
+            {t.sky.title}
+          </h2>
+          <p data-reveal className="mt-8 text-lg leading-relaxed text-white/85">
+            {t.sky.body}
+          </p>
+          <p data-reveal className="mt-6 inline-flex items-center gap-3 text-sm text-[#e9d9a8]">
+            <span className="h-px w-8 shrink-0 bg-current" />
+            {t.sky.action}
           </p>
         </div>
       </section>
@@ -153,7 +187,7 @@ export function Sections() {
               className="group relative overflow-hidden rounded-2xl border border-white/15 bg-black/25 p-7 backdrop-blur-md transition-colors duration-500 hover:border-[#e9d9a8]/50 hover:bg-black/35"
             >
               <div className="flex items-start justify-between">
-                <span className="font-display text-sm text-white/50">0{i + 2}</span>
+                <span className="font-display text-sm text-white/50">0{i + 4}</span>
                 <span className="rounded-full border border-white/20 px-3 py-1 text-[9px] uppercase tracking-[0.25em] text-white/60">
                   {t.worlds.soon}
                 </span>

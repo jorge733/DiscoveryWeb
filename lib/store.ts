@@ -42,8 +42,8 @@ export const useT = () => dict[useApp((s) => s.lang)];
 export const frame = {
   /** Raw page scroll progress, 0..1 */
   scroll: 0,
+  /** Scroll position in section units: 2.5 = halfway through the third section */
+  section: 0,
   /** Scroll velocity reported by Lenis */
   velocity: 0,
-  /** Pointer speed in px/frame, smoothed */
-  pointerSpeed: 0,
 };

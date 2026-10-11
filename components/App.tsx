@@ -9,6 +9,7 @@ import { Hud } from "./ui/Hud";
 import { Loader } from "./ui/Loader";
 import { Sections } from "./ui/Sections";
 import { SmoothScroll } from "./ui/SmoothScroll";
+import { Veil } from "./ui/Veil";
 
 const Experience = dynamic(() => import("./scene/Experience"), { ssr: false });
 
@@ -29,6 +30,7 @@ export function App() {
       <Experience />
       <SmoothScroll />
       <Sections />
+      <Veil />
       <Hud />
       <Loader />
       <Cursor />

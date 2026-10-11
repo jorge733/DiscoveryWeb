@@ -57,6 +57,20 @@ html.lenis body {
   overflow: hidden;
 }
 
+/* Soft shade behind text blocks so copy stays legible over bright scenery. */
+.scrim {
+  position: relative;
+  isolation: isolate;
+}
+.scrim::before {
+  content: "";
+  position: absolute;
+  inset: -25% -30%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgb(4 6 10 / 0.5), rgb(4 6 10 / 0.2) 60%, transparent);
+}
+
 .vignette {
   background: radial-gradient(ellipse at center, transparent 45%, rgb(5 6 3 / 0.55) 100%);
 }
