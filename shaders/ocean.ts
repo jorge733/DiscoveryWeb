@@ -24,6 +24,8 @@ varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vCrest;
 varying float vRippleFoam;
+varying vec3 vViewDir;
+varying float vDist;
 
 vec3 gerstner(vec4 w, vec2 p, float fade, inout vec3 tangent, inout vec3 binormal) {
   float k = 6.28318 / w.w;
@@ -75,6 +77,10 @@ void main() {
   vNormal = normal;
   vCrest = offset.y;
   vRippleFoam = rippleFoam;
+  // Distances are computed here in highp: squaring kilometres overflows mediump fragments.
+  vec3 toCam = cameraPosition - world;
+  vDist = length(toCam);
+  vViewDir = toCam / vDist;
   gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 }
 `;
@@ -95,6 +101,8 @@ varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vCrest;
 varying float vRippleFoam;
+varying vec3 vViewDir;
+varying float vDist;
 
 ${skyRadiance}
 
@@ -127,20 +135,23 @@ vec3 sky(vec3 dir) {
 }
 
 void main() {
-  vec3 toCam = cameraPosition - vWorld;
-  float dist = length(toCam);
-  vec3 V = toCam / dist;
+  float dist = vDist;
+  vec3 V = normalize(vViewDir);
 
   vec3 N = normalize(vNormal);
   float detailFade = 1.0 - smoothstep(30.0, 260.0, dist);
+#ifdef LOW_PRECISION
+  vec2 g = vec2(0.0); // capillary detail needs highp world coordinates
+#else
   vec2 g = detail(vWorld.xz) * detailFade;
+#endif
   N = normalize(N + vec3(-g.x, 0.0, -g.y));
 
   vec3 R = reflect(-V, N);
   R.y = abs(R.y);
   float fresnel = 0.02 + 0.98 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
 
-  vec3 sunDir = normalize(uSunPosition);
+  vec3 sunDir = uSunDir;
   vec3 reflection = sky(R);
 
   // Light scattering through the thin crests, strongest looking towards the sun.
@@ -155,7 +166,11 @@ void main() {
   col += uSunColor * spec * uSunStrength;
 
   // Foam on the highest crests and where the visitor touched the water.
+#ifdef LOW_PRECISION
+  float foamNoise = 0.25;
+#else
   float foamNoise = vnoise(vWorld.xz * 0.9 + uTime * 0.2) * vnoise(vWorld.xz * 2.3 - uTime * 0.3);
+#endif
   float foam = smoothstep(1.3, 2.4, vCrest + foamNoise * 1.2) + vRippleFoam * foamNoise * 2.0;
   vec3 foamColor = sky(vec3(0.0, 1.0, 0.0)) * 1.4 + uSunColor * 0.04 * uSunStrength;
   col = mix(col, foamColor, clamp(foam, 0.0, 1.0) * 0.8);

@@ -65,6 +65,7 @@ void main() {
   float dust = exp(-d * d * 2.5) * 0.06;
   float a = mix(star, dust, vSoft) * smoothstep(1.0, 0.8, d);
   gl_FragColor = vec4(vColor * a * uOpacity, 1.0);
+  #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
 `;
@@ -96,6 +97,7 @@ void main() {
   float d = length(gl_PointCoord - 0.5) * 2.0;
   float a = exp(-d * d * 5.0) * smoothstep(1.0, 0.7, d);
   gl_FragColor = vec4(vec3(0.85, 0.9, 1.0) * a * vTwinkle * vBright * uOpacity * 1.6, 1.0);
+  #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
 `;
@@ -123,6 +125,7 @@ void main() {
   vec3 col = uNightSky * (0.35 + 0.65 * (1.0 - y));
   col += uGalaxyColor * pow(max(dot(dir, uGalaxyDir), 0.0), 10.0);
   gl_FragColor = vec4(col * uNight, 1.0);
+  #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
 `;

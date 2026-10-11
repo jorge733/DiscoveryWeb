@@ -1,35 +1,36 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bloom, ChromaticAberration, EffectComposer, ToneMapping } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Vector2 } from "three";
-import { listenPointer, updateJourney, updatePointer } from "@/lib/journey";
+import { probeDevice, type DeviceInfo } from "@/lib/device";
+import { journey, listenPointer, updateJourney, updatePointer } from "@/lib/journey";
 import { useApp } from "@/lib/store";
+import { DebugPanel, stats } from "../ui/DebugPanel";
 import { Nature, type Quality } from "./Nature";
 import { OceanWorld } from "./ocean/OceanWorld";
 
-function detectQuality(): { quality: Quality; dpr: [number, number] } {
-  const coarse = window.matchMedia("(pointer: coarse)").matches;
-  const small = window.innerWidth < 768;
-  const cores = navigator.hardwareConcurrency ?? 4;
-  if (coarse || small) {
-    return {
-      quality: { grass: 28000, terrainSegments: 180, particles: 350, oceanRings: 140, oceanSegments: 220, stars: 40000, postfx: "lite" },
-      dpr: [1, 1.5],
-    };
+function qualityFor(device: DeviceInfo): { quality: Quality; dpr: number } {
+  const lowPrecision = !device.highp;
+  switch (device.tier) {
+    case "low":
+      return {
+        quality: { grass: 14000, terrainSegments: 140, particles: 200, oceanRings: 110, oceanSegments: 180, stars: 22000, postfx: "off", lowPrecision },
+        dpr: 1,
+      };
+    case "mid":
+      return {
+        quality: { grass: device.mobile ? 26000 : 55000, terrainSegments: device.mobile ? 180 : 260, particles: 400, oceanRings: 150, oceanSegments: 260, stars: device.mobile ? 40000 : 70000, postfx: "lite", lowPrecision },
+        dpr: Math.min(window.devicePixelRatio, 1.5),
+      };
+    default:
+      return {
+        quality: { grass: 95000, terrainSegments: 360, particles: 900, oceanRings: 220, oceanSegments: 480, stars: 100000, postfx: "full", lowPrecision },
+        dpr: Math.min(window.devicePixelRatio, 2),
+      };
   }
-  if (cores <= 4) {
-    return {
-      quality: { grass: 55000, terrainSegments: 260, particles: 600, oceanRings: 180, oceanSegments: 320, stars: 70000, postfx: "lite" },
-      dpr: [1, 1.5],
-    };
-  }
-  return {
-    quality: { grass: 95000, terrainSegments: 360, particles: 900, oceanRings: 220, oceanSegments: 480, stars: 100000, postfx: "full" },
-    dpr: [1, 2],
-  };
 }
 
 /** Advances shared journey/pointer state once per frame, before the worlds read it. */
@@ -44,11 +45,64 @@ function Director() {
   return null;
 }
 
+/**
+ * Watches the real frame rate and sheds load when the device can't keep up:
+ * first resolution, then post-processing.
+ */
+function Governor({ onDegrade }: { onDegrade: () => void }) {
+  const setDpr = useThree((s) => s.setDpr);
+  const dpr = useThree((s) => s.viewport.dpr);
+  const acc = useRef({ frames: 0, time: 0, settle: 3 });
+
+  useFrame((_, delta) => {
+    const a = acc.current;
+    if (a.settle > 0) {
+      a.settle -= delta; // ignore shader compilation and world swaps
+      return;
+    }
+    a.frames++;
+    a.time += delta;
+    if (a.time < 2) return;
+    const fps = a.frames / a.time;
+    stats.fps = fps;
+    a.frames = 0;
+    a.time = 0;
+    if (fps < 34 && dpr > 1) {
+      setDpr(Math.max(1, dpr - 0.25));
+      a.settle = 1;
+    } else if (fps < 26 && dpr <= 1) {
+      onDegrade();
+      a.settle = 2;
+    }
+  });
+
+  useEffect(() => {
+    stats.dpr = dpr;
+  }, [dpr]);
+  return null;
+}
+
+/** Builds the ocean world only once the visitor is heading there, saving memory on phones. */
+function LazyOcean({ quality }: { quality: Quality }) {
+  const [show, setShow] = useState(false);
+  useFrame(() => {
+    if (!show && journey.s > 1.5) setShow(true);
+  });
+  return show ? <OceanWorld quality={quality} /> : null;
+}
+
 const CA_OFFSET = new Vector2(0.00035, 0.00035);
 
 export default function Experience() {
   const setReady = useApp((s) => s.setReady);
-  const { quality, dpr } = useMemo(detectQuality, []);
+  const device = useMemo(probeDevice, []);
+  const { quality, dpr } = useMemo(() => qualityFor(device), [device]);
+  const [postfx, setPostfx] = useState(quality.postfx);
+
+  useEffect(() => {
+    stats.tier = device.tier;
+    stats.postfx = postfx;
+  }, [device, postfx]);
 
   return (
     <div className="fixed inset-0 z-0" aria-hidden>
@@ -56,22 +110,36 @@ export default function Experience() {
         dpr={dpr}
         eventSource={document.body}
         eventPrefix="client"
-        camera={{ fov: 56, near: 0.1, far: 8000, position: [0, 2, 14] }}
-        gl={{ antialias: false, powerPreference: "high-performance", stencil: false }}
-        onCreated={() => {
+        camera={{ fov: 56, near: 0.25, far: 7000, position: [0, 2, 14] }}
+        gl={{ antialias: postfx === "off", powerPreference: "high-performance", stencil: false }}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener("webglcontextlost", (e) => {
+            e.preventDefault();
+            stats.contextLost++;
+          });
           // Let a couple of frames render (shader compile) before announcing readiness.
           requestAnimationFrame(() => requestAnimationFrame(setReady));
         }}
       >
         <Director />
+        <Governor onDegrade={() => setPostfx("off")} />
         <Nature quality={quality} />
-        <OceanWorld quality={quality} />
-        <EffectComposer multisampling={quality.postfx === "full" ? 4 : 0}>
-          <Bloom mipmapBlur intensity={0.45} luminanceThreshold={1.1} luminanceSmoothing={0.3} radius={0.6} />
-          <ChromaticAberration offset={CA_OFFSET} radialModulation modulationOffset={0.35} />
-          <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-        </EffectComposer>
+        <LazyOcean quality={quality} />
+        {postfx === "full" && (
+          <EffectComposer multisampling={4}>
+            <Bloom mipmapBlur intensity={0.45} luminanceThreshold={1.1} luminanceSmoothing={0.3} radius={0.6} />
+            <ChromaticAberration offset={CA_OFFSET} radialModulation modulationOffset={0.35} />
+            <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          </EffectComposer>
+        )}
+        {postfx === "lite" && (
+          <EffectComposer multisampling={0}>
+            <Bloom mipmapBlur intensity={0.4} luminanceThreshold={1.1} luminanceSmoothing={0.3} radius={0.5} levels={5} />
+            <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          </EffectComposer>
+        )}
       </Canvas>
+      <DebugPanel device={device} />
     </div>
   );
 }

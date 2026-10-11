@@ -1,34 +1,43 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { forwardRef, useImperativeHandle, useMemo } from "react";
-import { Sky } from "three/examples/jsm/objects/Sky.js";
+import { useMemo, useRef } from "react";
+import { BackSide, BoxGeometry, Mesh, ShaderMaterial } from "three";
+import type { SkyUniforms } from "@/lib/skyParams";
+import { skyDomeFragment, skyDomeVertex } from "@/shaders/sky";
 
-export type SkyUniforms = Sky["material"]["uniforms"];
+const box = new BoxGeometry(1, 1, 1);
 
-/** three's physical sky (with procedural clouds), scaled to sit behind everything. */
-export const SkyDome = forwardRef<SkyUniforms, { distance?: number; clouds?: number }>(function SkyDome(
-  { distance = 4500, clouds = 0.35 },
-  ref,
-) {
-  const sky = useMemo(() => {
-    const s = new Sky();
-    s.scale.setScalar(distance);
-    const u = s.material.uniforms;
-    u.mieCoefficient.value = 0.005;
-    u.mieDirectionalG.value = 0.82;
-    u.cloudCoverage.value = clouds;
-    u.cloudDensity.value = 0.45;
-    u.cloudElevation.value = 0.55;
-    u.cloudSpeed.value = 0.00003;
-    return s;
-  }, [distance, clouds]);
+/** Physical sky with sun disc and procedural clouds, driven by shared sky uniforms. */
+export function SkyDome({
+  uniforms,
+  distance = 4500,
+  lowPrecision = false,
+}: {
+  uniforms: SkyUniforms;
+  distance?: number;
+  lowPrecision?: boolean;
+}) {
+  const material = useMemo(
+    () =>
+      new ShaderMaterial({
+        vertexShader: skyDomeVertex,
+        fragmentShader: skyDomeFragment,
+        uniforms,
+        side: BackSide,
+        depthWrite: false,
+        defines: lowPrecision ? { LOW_PRECISION: 1 } : {},
+      }),
+    [uniforms, lowPrecision],
+  );
 
-  useImperativeHandle(ref, () => sky.material.uniforms, [sky]);
+  const mesh = useRef<Mesh>(null);
 
   useFrame((state) => {
-    sky.material.uniforms.time.value = state.clock.elapsedTime;
+    uniforms.uTime.value = state.clock.elapsedTime;
+    // Centred on the camera so the dome can never be left behind.
+    mesh.current?.position.copy(state.camera.position);
   });
 
-  return <primitive object={sky} />;
-});
+  return <mesh ref={mesh} geometry={box} material={material} scale={distance} frustumCulled={false} />;
+}

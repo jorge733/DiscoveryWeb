@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { probeDevice } from "@/lib/device";
 import { journey } from "@/lib/journey";
 import { veilAt } from "@/lib/worlds";
 
@@ -11,13 +12,15 @@ export function Veil() {
   useEffect(() => {
     let raf = 0;
     let last = -1;
+    // Backdrop blur is expensive on phones; the gradient alone hides the swap there.
+    const blur = !probeDevice().mobile;
     const loop = () => {
       const v = veilAt(journey.s);
       if (root.current && Math.abs(v - last) > 0.002) {
         last = v;
         root.current.style.opacity = v.toFixed(3);
         root.current.style.visibility = v > 0.001 ? "visible" : "hidden";
-        root.current.style.backdropFilter = v > 0.001 ? `blur(${(v * 24).toFixed(1)}px)` : "none";
+        root.current.style.backdropFilter = blur && v > 0.001 ? `blur(${(v * 24).toFixed(1)}px)` : "none";
         root.current.style.transform = `scale(${1 + (1 - v) * 0.15})`;
       }
       raf = requestAnimationFrame(loop);

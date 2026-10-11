@@ -9,7 +9,8 @@ import { createOceanAtmosphere, sampleOcean } from "@/lib/oceanSky";
 import { VALLEY_END } from "@/lib/worlds";
 import { RIPPLE_COUNT, WAVES } from "@/shaders/ocean";
 import type { Quality } from "../Nature";
-import { SkyDome, type SkyUniforms } from "../SkyDome";
+import { SkyDome } from "../SkyDome";
+import { createSkyUniforms, setSky } from "@/lib/skyParams";
 import { Galaxy, GALAXY_RADIUS } from "./Galaxy";
 import { Stars } from "./Stars";
 import { Water } from "./Water";
@@ -32,7 +33,8 @@ export function OceanWorld({ quality }: { quality: Quality }) {
   const group = useRef<Group>(null);
   const skyFollow = useRef<Group>(null);
   const galaxy = useRef<Group>(null);
-  const sky = useRef<SkyUniforms>(null);
+  const sky = useMemo(createSkyUniforms, []);
+  const sunDir = useMemo(() => new Vector3(), []);
   const atmosphere = useMemo(createOceanAtmosphere, []);
 
   const state = useRef({
@@ -47,7 +49,7 @@ export function OceanWorld({ quality }: { quality: Quality }) {
 
   const water = useMemo(
     () => ({
-      uTime: { value: 0 },
+      // uTime comes from the shared sky uniforms below.
       uWaves: { value: WAVES.map(([x, y, s, l]) => new Vector4(x, y, s, l)) },
       uRipples: { value: Array.from({ length: RIPPLE_COUNT }, () => new Vector4(0, 0, -100, 0)) },
       uSwell: { value: 1 },
@@ -60,11 +62,7 @@ export function OceanWorld({ quality }: { quality: Quality }) {
       uGalaxyDir: { value: GALAXY_DIR.clone() },
       uGalaxyColor: { value: new Color("#241d48") },
       uFogDensity: { value: 0.0011 },
-      uSunPosition: { value: new Vector3() },
-      uRayleigh: { value: 2 },
-      uTurbidity: { value: 6 },
-      uMieCoefficient: { value: 0.005 },
-      uMieDirectionalG: { value: 0.82 },
+      ...sky,
     }),
     [],
   );
@@ -122,16 +120,9 @@ export function OceanWorld({ quality }: { quality: Quality }) {
 
     // Sky + sun, ahead of the camera over the sea.
     const el = MathUtils.degToRad(atmosphere.elevation);
-    const sunPos = water.uSunPosition.value.set(0, Math.sin(el), -Math.cos(el));
-    if (sky.current) {
-      sky.current.sunPosition.value.copy(sunPos);
-      sky.current.turbidity.value = atmosphere.turbidity;
-      sky.current.rayleigh.value = atmosphere.rayleigh;
-      sky.current.cloudCoverage.value = 0.22 * (1 - atmosphere.night);
-    }
+    setSky(sky, sunDir.set(0, Math.sin(el), -Math.cos(el)), atmosphere.rayleigh, atmosphere.turbidity);
+    sky.uCloudCoverage.value = 0.22 * (1 - atmosphere.night);
     water.uTime.value = t;
-    water.uTurbidity.value = atmosphere.turbidity;
-    water.uRayleigh.value = atmosphere.rayleigh;
     water.uSunColor.value.copy(atmosphere.sun);
     water.uSunStrength.value = atmosphere.sunStrength;
     water.uDeep.value.copy(atmosphere.deep);
@@ -196,14 +187,14 @@ export function OceanWorld({ quality }: { quality: Quality }) {
 
   return (
     <group ref={group} visible={false}>
-      <SkyDome ref={sky} clouds={0.22} />
+      <SkyDome uniforms={sky} lowPrecision={quality.lowPrecision} />
       <group ref={skyFollow}>
         <Stars count={Math.round(quality.stars * 0.06)} starUniforms={starUniforms} domeUniforms={domeUniforms} />
         <group position={GALAXY_DIR.clone().multiplyScalar(GALAXY_DISTANCE)} rotation={[1.3, 0.15, 0.35]}>
           <Galaxy ref={galaxy} count={quality.stars} uniforms={galaxyUniforms} />
         </group>
       </group>
-      <Water rings={quality.oceanRings} segments={quality.oceanSegments} uniforms={water} />
+      <Water rings={quality.oceanRings} segments={quality.oceanSegments} uniforms={water} lowPrecision={quality.lowPrecision} />
     </group>
   );
 }

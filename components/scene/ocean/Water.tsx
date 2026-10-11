@@ -57,16 +57,25 @@ export function Water({
   rings,
   segments,
   uniforms,
+  lowPrecision = false,
 }: {
   rings: number;
   segments: number;
   uniforms: Record<string, IUniform>;
+  /** Skip effects that need highp world coordinates in the fragment shader */
+  lowPrecision?: boolean;
 }) {
   const mesh = useRef<Mesh>(null);
   const geometry = useMemo(() => radialGrid(rings, segments, 5000, 0.2), [rings, segments]);
   const material = useMemo(
-    () => new ShaderMaterial({ vertexShader: oceanVertex, fragmentShader: oceanFragment, uniforms }),
-    [uniforms],
+    () =>
+      new ShaderMaterial({
+        vertexShader: oceanVertex,
+        fragmentShader: oceanFragment,
+        uniforms,
+        defines: lowPrecision ? { LOW_PRECISION: 1 } : {},
+      }),
+    [uniforms, lowPrecision],
   );
 
   useFrame(({ camera }) => {

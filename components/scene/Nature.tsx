@@ -18,9 +18,10 @@ import { journey, pointer, pointerRecentlyMoved } from "@/lib/journey";
 import { heightAt } from "@/lib/terrain";
 import { createAtmosphere, sampleAtmosphere } from "@/lib/timeOfDay";
 import { VALLEY_END } from "@/lib/worlds";
+import { createSkyUniforms, setSky } from "@/lib/skyParams";
 import { Grass, type GrassUniformsTarget } from "./Grass";
 import { Particles } from "./Particles";
-import { SkyDome, type SkyUniforms } from "./SkyDome";
+import { SkyDome } from "./SkyDome";
 import { Terrain } from "./Terrain";
 
 export interface Quality {
@@ -30,7 +31,9 @@ export interface Quality {
   oceanRings: number;
   oceanSegments: number;
   stars: number;
-  postfx: "full" | "lite";
+  postfx: "full" | "lite" | "off";
+  /** GPU lacks highp fragment floats: shaders skip precision-hungry effects */
+  lowPrecision: boolean;
 }
 
 const ground = (x: number, z: number, lift: number) => new Vector3(x, heightAt(x, z) + lift, z);
@@ -90,7 +93,11 @@ export function Nature({ quality }: { quality: Quality }) {
   );
 
   const group = useRef<Group>(null);
-  const sky = useRef<SkyUniforms>(null);
+  const sky = useMemo(() => {
+    const u = createSkyUniforms();
+    u.uCloudCoverage.value = 0.32;
+    return u;
+  }, []);
   const sun = useRef<DirectionalLight>(null);
   const hemi = useRef<HemisphereLight>(null);
   const state = useRef({ parallax: { x: 0, y: 0 }, audioTick: 0 });
@@ -138,11 +145,7 @@ export function Nature({ quality }: { quality: Quality }) {
     const el = MathUtils.degToRad(atmosphere.elevation);
     const az = MathUtils.degToRad(atmosphere.azimuth);
     const sunDir = tmpRay.set(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-    if (sky.current) {
-      sky.current.sunPosition.value.copy(sunDir);
-      sky.current.turbidity.value = atmosphere.turbidity;
-      sky.current.rayleigh.value = atmosphere.rayleigh;
-    }
+    setSky(sky, sunDir, atmosphere.rayleigh, atmosphere.turbidity);
     if (sun.current) {
       sun.current.position.copy(sunDir).multiplyScalar(120).add(camera.position);
       sun.current.target.position.copy(camera.position);
@@ -172,7 +175,7 @@ export function Nature({ quality }: { quality: Quality }) {
 
   return (
     <group ref={group}>
-      <SkyDome ref={sky} clouds={0.32} />
+      <SkyDome uniforms={sky} lowPrecision={quality.lowPrecision} />
       <hemisphereLight ref={hemi} intensity={1.5} />
       <directionalLight ref={sun} />
       <Terrain segments={quality.terrainSegments} />

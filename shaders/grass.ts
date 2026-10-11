@@ -138,6 +138,7 @@ void main() {
   vec3 col = mix(uDayColor, uNightColor * (1.5 + vFlicker * 2.5), uDusk);
   float alpha = a * mix(0.35, 0.25 + vFlicker * 0.75, uDusk);
   gl_FragColor = vec4(col, alpha);
+  #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
 `;
