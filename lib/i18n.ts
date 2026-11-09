@@ -7,6 +7,10 @@ export const dict = {
       enter: "Entrar",
       hint: "Recomendado: con sonido y auriculares",
     },
+    desktopOnly: {
+      title: "Disponible solo en PC",
+      body: "Discovery está pensado para computadoras. Ábrelo desde un equipo de escritorio o una laptop para vivir la experiencia.",
+    },
     hud: {
       sound: "Sonido",
       on: "Activado",
@@ -67,6 +71,10 @@ export const dict = {
       loading: "Generating the world",
       enter: "Enter",
       hint: "Best with sound and headphones",
+    },
+    desktopOnly: {
+      title: "Available on desktop only",
+      body: "Discovery is built for computers. Open it on a desktop or laptop to experience it.",
     },
     hud: {
       sound: "Sound",
